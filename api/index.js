@@ -2,7 +2,7 @@ import OpenAI from 'openai';
 
 const openai = new OpenAI({
   baseURL: "https://openrouter.ai/api/v1",
-  apiKey: process.env.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,
+  apiKey: process.env.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,
   defaultHeaders: {
     "HTTP-Referer": "https://vercel.com",
     "X-Title": "Vercel AI API",
