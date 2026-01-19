@@ -5,72 +5,92 @@ import os
 
 app = Flask(__name__)
 
-# --- CONFIGURATION ---
-# Get keys from Render Environment Variables
+# Render Environment Variable থেকে Key নিবে
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
-TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
-MODEL_NAME = "deepseek/deepseek-r1-0528:free" 
 
-def ask_openrouter(prompt):
+# এই মডেলটি ইনস্ট্রাকশন খুব ভালো ফলো করে
+MODEL_NAME = "meta-llama/llama-3.3-70b-instruct:free"
+
+# --- গোপন নির্দেশ (AI কে শেখানো হচ্ছে কিভাবে কোড লিখবে) ---
+SYSTEM_INSTRUCTION = """
+You are an expert Telegram Bot Developer. 
+Your task is to convert the user's request into a 'ctx.reply' JavaScript code block using Telegraf syntax.
+
+RULES:
+1. Output ONLY the code. No explanations, no markdown (```), no "Here is your code".
+2. Use valid JavaScript format for Telegraf.
+3. The message text must be in Bengali (or the language requested) with beautiful styling (Bold, Italic).
+4. Use appropriate Emojis (👋, 📢, ⬇️, 🔹) to make it look professional.
+5. Always include 'parse_mode: "Markdown"'.
+6. Always include an 'inline_keyboard' with relevant buttons based on the topic.
+
+EXAMPLE FORMAT TO FOLLOW:
+ctx.reply(
+  `*HEADER TOPIC* 📢
+  
+  Body text goes here with details...
+  
+  👇 Select an option below:`,
+  {
+    parse_mode: "Markdown",
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "Button 1", callback_data: "btn_1" }, { text: "Button 2", callback_data: "btn_2" }],
+        [{ text: "❌ Close", callback_data: "cancel" }]
+      ]
+    }
+  }
+);
+"""
+
+@app.route('/api', methods=['GET'])
+def generate_code():
+    # 1. URL থেকে টপিক নেওয়া (?q=...)
+    topic = request.args.get('q')
+
+    if not topic:
+        return jsonify({"error": "Please provide a topic. Example: /api?q=Welcome Message"}), 400
+
     try:
+        # 2. AI কে রিকোয়েস্ট পাঠানো
+        payload = {
+            "model": MODEL_NAME,
+            "messages": [
+                {"role": "system", "content": SYSTEM_INSTRUCTION},
+                {"role": "user", "content": f"Write a Telegram code for: {topic}"}
+            ],
+            "temperature": 0.5 # ক্রিয়েটিভ কিন্তু সঠিক ফরম্যাটের জন্য
+        }
+
         response = requests.post(
             url="https://openrouter.ai/api/v1/chat/completions",
             headers={
                 "Authorization": f"Bearer {OPENROUTER_API_KEY}",
                 "Content-Type": "application/json",
-                "HTTP-Referer": "https://telegram.org", 
-                "X-Title": "RenderBot",
+                "HTTP-Referer": "https://render.com",
+                "X-Title": "CodeGenerator"
             },
-            data=json.dumps({
-                "model": MODEL_NAME,
-                "messages": [
-                    {"role": "user", "content": prompt}
-                ]
-            })
+            data=json.dumps(payload)
         )
         
+        # 3. রেসপন্স হ্যান্ডেল করা
         if response.status_code == 200:
-            return response.json()['choices'][0]['message']['content']
-        else:
-            return f"Error from AI: {response.text}"
-    except Exception as e:
-        return f"Connection Failed: {str(e)}"
-
-def send_telegram_message(chat_id, text):
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    payload = {
-        "chat_id": chat_id,
-        "text": text,
-        "parse_mode": "Markdown"
-    }
-    requests.post(url, json=payload)
-
-@app.route('/', methods=['POST'])
-def webhook():
-    try:
-        data = request.get_json()
-        
-        if 'message' in data:
-            message = data['message']
-            chat_id = message['chat']['id']
+            ai_code = response.json()['choices'][0]['message']['content']
             
-            if 'text' in message:
-                user_text = message['text']
-                # 1. Send a "Thinking..." message (Optional, good for UX)
-                send_telegram_message(chat_id, "🤔 Thinking...")
-                
-                # 2. Get AI Response
-                ai_response = ask_openrouter(user_text)
-                
-                # 3. Send Final Response
-                send_telegram_message(chat_id, ai_response)
+            # ক্লিন করা (যদি AI ভুল করে ```js দিয়ে দেয়, সেটা মুছে ফেলা)
+            clean_code = ai_code.replace("```javascript", "").replace("```js", "").replace("```", "").strip()
 
-        return jsonify({"status": "ok"}), 200
+            return jsonify({
+                "status": "success",
+                "topic": topic,
+                "generated_code": clean_code
+            })
+        else:
+            return jsonify({"error": "AI Provider Error", "details": response.text}), 500
 
     except Exception as e:
-        print(f"Error: {e}")
-        return jsonify({"status": "error"}), 500
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
-    # Render assigns a port automatically
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 10000)))
+    port = int(os.environ.get('PORT', 10000))
+    app.run(host='0.0.0.0', port=port)
