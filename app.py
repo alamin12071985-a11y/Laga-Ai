@@ -9,7 +9,7 @@ app = Flask(__name__)
 # Get keys from Render Environment Variables
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
-MODEL_NAME = "google/gemini-2.0-flash-lite-preview-02-05:free" 
+MODEL_NAME = "deepseek/deepseek-r1-0528:free" 
 
 def ask_openrouter(prompt):
     try:
