@@ -1,17 +1,21 @@
 from flask import Flask, request, Response
+from flask_cors import CORS  # <--- নতুন ইমপোর্ট
 import requests
 import json
 import os
 
 app = Flask(__name__)
 
-# Render থেকে কি-টা নিবে
+# --- CORS চালু করা হলো (যাতে টেলিগ্রাম বা যেকোনো জায়গা থেকে কাজ করে) ---
+CORS(app) 
+
+# Render Env থেকে Key নিবে
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 MODEL_NAME = "llama-3.3-70b-versatile"
 
 SYSTEM_INSTRUCTION = """
 You are an expert Telegram Bot Developer using Telegraf (JavaScript).
-Your task is to generate valid 'ctx.reply' code blocks based on the user's request.
+Your task is to generate valid 'ctx.reply' code blocks.
 
 RULES:
 1. Output ONLY the JavaScript code. No markdown (```), no explanations.
@@ -19,9 +23,6 @@ RULES:
 3. Use Emojis and Bold text for styling.
 4. Always include 'parse_mode: "Markdown"'.
 5. Always include an 'inline_keyboard'.
-
-EXAMPLE OUTPUT:
-ctx.reply(`*Title*\nMessage...`, { parse_mode: "Markdown", reply_markup: { inline_keyboard: [[{text:"Btn", callback_data:"d"}]] } });
 """
 
 @app.route('/api', methods=['GET'])
@@ -53,18 +54,13 @@ def generate_code():
             ai_code = response.json()['choices'][0]['message']['content']
             clean_code = ai_code.replace("```javascript", "").replace("```js", "").replace("```", "").strip()
 
-            # --- আসল সমাধান এখানে ---
             result_data = {
                 "status": "success",
                 "topic": topic,
                 "generated_code": clean_code
             }
             
-            # 1. ensure_ascii=False : বাংলা লেখাকে ইউনিকোডে কনভার্ট করবে না।
-            # 2. indent=4 : দেখতে সুন্দর (Pretty Print) দেখাবে।
             json_response = json.dumps(result_data, ensure_ascii=False, indent=4)
-
-            # 3. charset=utf-8 : ব্রাউজারকে বাধ্য করবে বাংলা দেখাতে।
             return Response(json_response, status=200, mimetype='application/json; charset=utf-8')
             
         else:
